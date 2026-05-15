@@ -45,28 +45,50 @@ for _cat, _names in METRIC_CATEGORIES.items():
 
 def classify_metric(metric_name: str) -> str:
     """
-    Classify a metric name into a category.
+    Classify a metric name into a category using token scoring.
 
     Returns one of: 'latency', 'errors', 'resource', 'traffic', 'unknown'.
-    Uses exact match first, then substring heuristics.
+    Handles proprietary/nested formats (e.g. 'com.aws.dynamodb.read.latency').
     """
     if not metric_name:
         return "unknown"
 
-    # Exact match
+    # 1. Exact match fast path
     if metric_name in _METRIC_NAME_TO_CATEGORY:
         return _METRIC_NAME_TO_CATEGORY[metric_name]
 
-    # Substring heuristics
-    lower = metric_name.lower()
-    if any(kw in lower for kw in ("latency", "duration", "response_time", "p99", "p95", "p50")):
-        return "latency"
-    if any(kw in lower for kw in ("error", "timeout", "fail", "5xx", "4xx", "retry")):
-        return "errors"
-    if any(kw in lower for kw in ("cpu", "memory", "mem", "disk", "gc_", "thread")):
-        return "resource"
-    if any(kw in lower for kw in ("rps", "throughput", "request", "qps", "queue", "connection")):
-        return "traffic"
+    # 2. Tokenize the metric name (split by dot, underscore, dash)
+    import re
+    # Convert camelCase to snake_case spaces, then split by non-alphanumeric
+    spaced = re.sub(r'([A-Z])', r' \1', metric_name).lower()
+    tokens = set(re.split(r'[^a-z0-9]+', spaced))
+
+    # 3. Score categories based on token presence
+    scores = {"latency": 0, "errors": 0, "resource": 0, "traffic": 0}
+    
+    # Keyword weights
+    latency_kws = {"latency", "duration", "response", "time", "p99", "p95", "p50", "timer"}
+    error_kws = {"error", "errors", "timeout", "fail", "failure", "5xx", "4xx", "retry", "exception", "dropped"}
+    resource_kws = {"cpu", "memory", "mem", "disk", "gc", "thread", "heap", "alloc", "io", "bytes"}
+    traffic_kws = {"rps", "throughput", "request", "requests", "qps", "queue", "connection", "connections"}
+
+    for token in tokens:
+        if not token: continue
+        if token in latency_kws: scores["latency"] += 2
+        if token in error_kws: scores["errors"] += 2
+        if token in resource_kws: scores["resource"] += 2
+        if token in traffic_kws: scores["traffic"] += 2
+        
+        # Partial matches (fallback)
+        if "lat" in token or "dur" in token: scores["latency"] += 1
+        if "err" in token or "fail" in token: scores["errors"] += 1
+        if "mem" in token or "cpu" in token: scores["resource"] += 1
+        if "req" in token or "conn" in token: scores["traffic"] += 1
+
+    # 4. Return the highest scoring category (if any score > 0)
+    best_category = max(scores, key=scores.get)
+    if scores[best_category] > 0:
+        return best_category
 
     return "unknown"
 
@@ -83,27 +105,41 @@ def is_degradation_metric(metric_name: str) -> bool:
 
 
 # ----------------------------------------------------------------
-# Event Parsing
+# Event Parsing & Normalization Utilities
 # ----------------------------------------------------------------
 
 REQUIRED_FIELDS = {"ts", "kind"}
 VALID_KINDS = {"deploy", "log", "metric", "trace", "topology", "incident_signal", "remediation"}
 
+def flatten_dict(d: dict, parent_key: str = '', sep: str = '.') -> dict:
+    """
+    Dynamically flatten arbitrarily nested JSON into dot-notation.
+    Example: {'jvm': {'gc': {'pause': 500}}} -> {'jvm.gc.pause': 500}
+    """
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 def parse_event(raw: dict) -> dict:
     """
     Parse and validate a raw event dict.
-
-    Raises ValueError if required fields are missing.
-    Returns the cleaned event dict.
+    Flattens nested data payloads automatically.
     """
     for field in REQUIRED_FIELDS:
         if field not in raw:
             raise ValueError(f"Missing required field: {field}")
 
+    # Dynamically flatten any nested "data" or "metrics" objects
+    if "data" in raw and isinstance(raw["data"], dict):
+        raw["data"] = flatten_dict(raw["data"])
+
     kind = raw["kind"]
     if kind not in VALID_KINDS:
-        # Don't reject unknown kinds — the spec says "teams may anticipate more"
         pass
 
     return raw
