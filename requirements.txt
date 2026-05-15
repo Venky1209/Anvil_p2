@@ -1,0 +1,2 @@
+duckdb>=0.10.0
+networkx>=3.2

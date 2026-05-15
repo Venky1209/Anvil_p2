@@ -1,0 +1,14 @@
+{"ts":"2026-05-10T14:00:00Z","kind":"deploy","service":"auth-svc","version":"v1.0.0","actor":"ci"}
+{"ts":"2026-05-10T14:05:00Z","kind":"metric","service":"auth-svc","name":"latency_p99_ms","value":120}
+{"ts":"2026-05-10T14:10:00Z","kind":"deploy","service":"payments-svc","version":"v2.14.0","actor":"ci"}
+{"ts":"2026-05-10T14:12:00Z","kind":"metric","service":"payments-svc","name":"latency_p99_ms","value":4820}
+{"ts":"2026-05-10T14:12:30Z","kind":"log","service":"checkout-api","level":"error","msg":"timeout calling payments-svc","trace_id":"abc123"}
+{"ts":"2026-05-10T14:13:00Z","kind":"trace","trace_id":"abc123","spans":[{"svc":"checkout-api","dur_ms":5012},{"svc":"payments-svc","dur_ms":4980}]}
+{"ts":"2026-05-10T14:15:00Z","kind":"incident_signal","incident_id":"INC-001","trigger":"alert/error-rate>5%"}
+{"ts":"2026-05-10T14:20:00Z","kind":"remediation","incident_id":"INC-001","action":"rollback","target":"payments-svc","version":"v2.13.4","outcome":"resolved"}
+{"ts":"2026-05-10T15:00:00Z","kind":"topology","change":"rename","from":"payments-svc","to":"billing-svc"}
+{"ts":"2026-05-10T16:00:00Z","kind":"deploy","service":"billing-svc","version":"v2.15.0","actor":"ci"}
+{"ts":"2026-05-10T16:02:00Z","kind":"metric","service":"billing-svc","name":"latency_p99_ms","value":5100}
+{"ts":"2026-05-10T16:02:30Z","kind":"log","service":"checkout-api","level":"error","msg":"timeout calling billing-svc","trace_id":"def456"}
+{"ts":"2026-05-10T16:05:00Z","kind":"incident_signal","incident_id":"INC-002","trigger":"alert/error-rate>5%"}
+{"ts":"2026-05-10T16:15:00Z","kind":"remediation","incident_id":"INC-002","action":"rollback","target":"billing-svc","version":"v2.14.0","outcome":"resolved"}
