@@ -15,11 +15,13 @@ if [[ -z "$BENCH_DIR" ]]; then
   fi
 fi
 
-export PYTHONPATH="$(cd "$ROOT/.." && pwd)${PYTHONPATH:+:$PYTHONPATH}"
-cd "$BENCH_DIR"
+export PYTHONPATH="$ROOT:$BENCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
+cd "$ROOT"
 
-python run.py \
-  --adapter Anvil.adapters.myteam:Engine \
-  --mode fast \
-  --seeds 314159 271828 161803 141421 173205 \
-  --out report.json
+if [[ "$#" -eq 0 ]]; then
+  set -- --mode fast --out "$ROOT/report.json"
+fi
+
+python -m run \
+  --adapter adapters.myteam:Engine \
+  "$@"

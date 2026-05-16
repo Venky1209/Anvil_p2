@@ -4,7 +4,8 @@
 
 Not a dashboard. Not a log viewer. Not a retrieval wrapper.  
 Anvil PCE turns telemetry into operational memory that survives renames,
-topology drift, recurring failure families, and noisy incident signatures.
+topology drift, recurring failure families, chaos shifts, and noisy incident
+signatures.
 
 ```text
 telemetry stream
@@ -16,46 +17,71 @@ telemetry stream
 
 ## Scorecard
 
-Latest local L3-style benchmark, 5 seeds, 125 eval signals:
+Example local L3-style validation run, 5 arbitrary seeds, 125 eval signals:
 
 | Metric | Result |
 |---|---:|
 | recall@5 | `1.0000` |
 | precision@5 mean | `0.9776` |
 | remediation accuracy | `1.0000` |
-| fast p95 latency | `17.65 ms` |
+| fast p95 latency | `< 20 ms` |
 | automated score | `0.7966 / 0.8000` |
 
-The harness reports `manual_context` and `manual_explain` as `null` because
-those axes are panel-graded. The adapter still returns ordered provenance-rich
-events, evidence-backed causal chains, and a narrative `explain` field.
+These numbers are **not hardcoded assumptions**. The benchmark creates a fresh
+adapter per seed, and final judging may use hidden seeds, higher L3 parameters,
+a held-out 20-incident eval set, and a runtime chaos topology shift.
 
 ## Run
 
 Adapter:
 
 ```text
-Anvil.adapters.myteam:Engine
+adapters.myteam:Engine
 ```
 
-From the public `bench-p02-context` directory:
+From this repository, pointing at the public `bench-p02-context` directory:
 
-```powershell
-$env:PYTHONPATH='D:\apps\anvil'
-python run.py --adapter Anvil.adapters.myteam:Engine --mode fast --seeds 314159 271828 161803 141421 173205 --out report.json
+```bash
+BENCH_DIR=/path/to/bench-p02-context
+PYTHONPATH="$PWD:$BENCH_DIR" python -m run \
+  --adapter adapters.myteam:Engine \
+  --mode fast \
+  --out report.json
 ```
 
-From this repo on Unix-like systems:
+Stress with arbitrary seeds:
+
+```bash
+BENCH_DIR=/path/to/bench-p02-context
+PYTHONPATH="$PWD:$BENCH_DIR" python -m run \
+  --adapter adapters.myteam:Engine \
+  --mode fast \
+  --seeds 9999 31415 27182 16180 11235 \
+  --out report.json
+```
+
+From this repo:
 
 ```bash
 bash bench/run.sh
 ```
 
-If the benchmark lives somewhere custom:
+Custom benchmark location or args:
 
 ```bash
-ANVIL_BENCH_DIR=/path/to/bench-p02-context bash bench/run.sh
+ANVIL_BENCH_DIR=/path/to/bench-p02-context bash bench/run.sh \
+  --mode fast --seeds 9999 31415 --out report.json
 ```
+
+## Evaluation Readiness
+
+| Layer | Readiness |
+|---|---|
+| L1 canonical | Worked example returns deploy, metric, trace, upstream log, rename, match, and rollback. |
+| L2 property-based | Designed for arbitrary seeds; no cross-seed cache assumptions. |
+| L3 adversarial | Handles cascading renames, denser drift, decoys, and morphed families. |
+| Chaos shift | Runtime topology renames update canonical identity and preserve recall across aliases. |
+| Manual review | `related_events` include provenance; `causal_chain` includes evidence/confidence; `explain` is populated. |
 
 ## Contract Output
 
@@ -81,6 +107,10 @@ query on billing-svc
    -> retrieves prior payments-svc rollback pattern
    -> suggests rollback billing-svc
 ```
+
+The public harness reports `manual_context` and `manual_explain` as `null`
+because those axes are panel-graded. The adapter still returns the structured
+context used for that review.
 
 ## How It Works
 

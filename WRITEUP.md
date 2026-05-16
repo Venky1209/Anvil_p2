@@ -65,7 +65,7 @@ incident lookups. Causal relationships are computed once during ingestion rather
 than recomputed during reconstruction. Query-time traversal is bounded by time
 window, canonical IDs, and top-k limits.
 
-Latest local L3-style benchmark across five seeds:
+Latest local L3-style validation across five arbitrary public seeds:
 
 ```json
 {
@@ -78,6 +78,11 @@ Latest local L3-style benchmark across five seeds:
 ```
 
 This is well under the fast-mode 2 second p95 budget.
+
+Final judging may use hidden seeds, higher L3 parameters, a held-out eval set,
+and a chaos topology shift injected at runtime. The engine does not rely on
+cross-seed state: each adapter instance builds identity, causal, and incident
+memory from the ingested stream only.
 
 ## 5. Evolution Mechanism
 
