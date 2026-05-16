@@ -1,167 +1,154 @@
-# Anvil Persistent Context Engine
+# Anvil PCE
 
-Submission for Anvil P-02: Persistent Context Engine for autonomous SRE.
+**Persistent Context Engine for autonomous SRE**
 
-The adapter implements an operational memory substrate, not a keyword or static
-vector retrieval wrapper. It ingests telemetry into a canonical service identity
-graph, synthesizes causal edges during ingestion, stores resolved incident
-episodes, and reconstructs incident context with topology-independent behavioral
-matching.
+Not a dashboard. Not a log viewer. Not a retrieval wrapper.  
+Anvil PCE turns telemetry into operational memory that survives renames,
+topology drift, recurring failure families, and noisy incident signatures.
 
-## Quickstart
+```text
+telemetry stream
+   -> canonical identity graph
+   -> causal edge synthesis
+   -> hot / warm / cold incident memory
+   -> adaptive context reconstruction
+```
 
-From the public benchmark directory:
+## Scorecard
+
+Latest local L3-style benchmark, 5 seeds, 125 eval signals:
+
+| Metric | Result |
+|---|---:|
+| recall@5 | `1.0000` |
+| precision@5 mean | `0.9776` |
+| remediation accuracy | `1.0000` |
+| fast p95 latency | `17.65 ms` |
+| automated score | `0.7966 / 0.8000` |
+
+The harness reports `manual_context` and `manual_explain` as `null` because
+those axes are panel-graded. The adapter still returns ordered provenance-rich
+events, evidence-backed causal chains, and a narrative `explain` field.
+
+## Run
+
+Adapter:
+
+```text
+Anvil.adapters.myteam:Engine
+```
+
+From the public `bench-p02-context` directory:
 
 ```powershell
 $env:PYTHONPATH='D:\apps\anvil'
 python run.py --adapter Anvil.adapters.myteam:Engine --mode fast --seeds 314159 271828 161803 141421 173205 --out report.json
 ```
 
-On Unix-like systems, from this repository:
+From this repo on Unix-like systems:
 
 ```bash
-bench/run.sh
+bash bench/run.sh
 ```
 
-`bench/run.sh` expects the benchmark at one of:
+If the benchmark lives somewhere custom:
 
-- `../Anvil-P-E/bench-p02-context`
-- `../Anvil-P-E-eval/bench-p02-context`
-- `$ANVIL_BENCH_DIR`
+```bash
+ANVIL_BENCH_DIR=/path/to/bench-p02-context bash bench/run.sh
+```
 
-## Adapter
+## Contract Output
 
-Use:
+`reconstruct_context()` returns the SDK `Context` shape:
+
+```python
+{
+    "related_events": list,          # chronological, deduped, with attrs.provenance
+    "causal_chain": list,            # evidence + confidence
+    "similar_past_incidents": list,  # incident_id + similarity + rationale
+    "suggested_remediations": list,  # action + target + historical_outcome
+    "confidence": float,             # 0..1
+    "explain": str,                  # human-readable narrative
+}
+```
+
+Worked-example behavior:
 
 ```text
-Anvil.adapters.myteam:Engine
+payments-svc deploy -> latency spike -> checkout timeout
+payments-svc renamed to billing-svc
+query on billing-svc
+   -> retrieves prior payments-svc rollback pattern
+   -> suggests rollback billing-svc
 ```
 
-Surface:
+## How It Works
 
-```python
-class Engine:
-    def ingest(self, events): ...
-    def reconstruct_context(self, signal, mode="fast"): ...
-    def close(self): ...
-```
+| Layer | What it does |
+|---|---|
+| Canonical identity | Merges service aliases across renames and topology drift. |
+| Causal graph | Links deploys, metrics, logs, and traces at ingest time. |
+| Behavioral fingerprint | Builds a 48-float incident shape independent of service names. |
+| Tiered matcher | Sorts canonical matches above cross-service matches while preserving raw cosine variance. |
+| Memory evolution | Reinforces successful causal paths and remediation actions. |
 
-Returned `Context` shape:
+## Glacier-Style Memory
 
-```python
-{
-    "related_events": list,
-    "causal_chain": list,
-    "similar_past_incidents": list,
-    "suggested_remediations": list,
-    "confidence": float,
-    "explain": str,
-}
-```
+Operational memory uses an AWS Glacier-like lifecycle:
 
-`related_events` are ordered, deduped, and include provenance in
-`event["attrs"]["provenance"]`.
+| Tier | Meaning |
+|---|---|
+| `hot` | Active incidents and recently accessed matches. |
+| `warm` | Recently resolved operational memory. |
+| `cold` | Older inactive incidents retained for long-horizon recall. |
 
-## Architecture
+Cold memory is not discarded. It remains searchable so old incidents can still
+surface under rename chains and signature drift.
 
-- **Identity resolution:** service names are mapped to stable canonical IDs.
-  Topology rename events merge aliases into the same operational identity, so
-  `payments-svc -> billing-svc` remains one memory entity.
-- **Causal synthesis:** deploy, metric, log, and trace events are linked at
-  ingest time into confidence-weighted causal edges.
-- **Incident memory:** incident episodes store canonical IDs, event IDs, causal
-  chain IDs, remediation outcome, and a 48-float behavioral fingerprint.
-- **Behavioral matching:** reconstruction uses tiered hybrid scoring. Canonical
-  matches are sorted above cross-service matches, but raw behavioral similarity
-  is preserved inside each tier to avoid score-ceiling compression.
-- **Memory evolution:** successful remediations reinforce stored causal edges and
-  feed future remediation suggestions.
-- **Glacier-style tiering:** operational memory follows an AWS Glacier-like
-  lifecycle. Active incidents and recently accessed matches are `hot`, recent
-  resolved episodes are `warm`, and older inactive resolved episodes become
-  `cold`. Long-horizon recall still searches all tiers, but tiering gives the
-  engine an inspectable salience model for memory evolution.
+## Optional Groq Explain Enrichment
 
-## Expected Benchmark Performance
-
-Latest local L3-style run:
-
-```json
-{
-  "recall@5": 1.0,
-  "precision@5_mean": 0.9776,
-  "remediation_acc": 1.0,
-  "latency_p95_ms": 14.75,
-  "latency_mean_ms": 9.926,
-  "n_signals_total": 125
-}
-```
-
-Automated score:
-
-```json
-{
-  "weighted_score": 0.7966,
-  "max_automated": 0.8
-}
-```
-
-The public harness reports `manual_context` and `manual_explain` as `null`
-because they are panel-graded. The adapter still returns structured
-`related_events`, `causal_chain`, and a human-readable `explain` string for
-manual review.
-
-## Optional Groq Enrichment
-
-Unknown or weakly explained incidents can enrich only the `explain` field with
-Groq:
+Groq is optional and affects only `explain`, never retrieval or scoring.
 
 ```bash
 export GROQ_API_KEY="your_key"
 ```
 
-or place this in `.env`:
+or create `.env`:
 
 ```env
 GROQ_API_KEY=your_key
 ```
 
-Without `GROQ_API_KEY`, LLM enrichment is disabled silently. Retrieval,
-remediation, and automated benchmark scores do not depend on Groq.
+No key means silent fallback.
 
-Egress disclosure: when enabled, the adapter sends a tiny summary of at most five
-error or critical logs to Groq using `llama-3.3-70b-versatile`. It never sends
-the full raw event stream. Each engine instance caps Groq enrichment at three
-calls, with a 2.5 second timeout and silent fallback.
-
-## Dependencies
-
-Runtime uses Python standard library for core ingestion, identity, storage, and
-scoring. Optional dependencies are pinned in `requirements.txt`.
-
-- `groq==1.2.0`, optional explain enrichment
-- `networkx==3.6.1`, disclosed graph traversal dependency
-- `numpy==2.4.4`, disclosed vector math dependency
+Egress disclosure: when enabled, Anvil sends a tiny summary of at most five
+error/critical logs to Groq `llama-3.3-70b-versatile`. It never sends the full
+event stream. Each engine instance caps Groq enrichment at three calls with a
+2.5 second timeout.
 
 ## Reproducibility
 
-Build:
-
 ```bash
 docker build -t anvil-pce .
-```
-
-Run with a mounted benchmark:
-
-```bash
 docker run --rm -e ANVIL_BENCH_DIR=/bench -v /path/to/Anvil-P-E/bench-p02-context:/bench anvil-pce
 ```
 
-## Files To Review
+Dependencies are pinned in `requirements.txt`:
 
-- `adapters/myteam.py` - benchmark adapter and reconstruction logic
-- `engine/ingestion/identity.py` - topology drift and rename handling
-- `engine/ingestion/causal.py` - relationship synthesis
-- `engine/ingestion/storage.py` - incident and event memory
-- `engine/compiler/fingerprint.py` - behavioral fingerprinting
-- `WRITEUP.md` - technical defense for judging
+```text
+groq==1.2.0
+networkx==3.6.1
+numpy==2.4.4
+```
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `adapters/myteam.py` | SDK adapter and reconstruction path. |
+| `engine/ingestion/identity.py` | Rename-safe canonical identity. |
+| `engine/ingestion/causal.py` | Dynamic relationship synthesis. |
+| `engine/ingestion/storage.py` | Event, edge, and episode memory. |
+| `engine/compiler/fingerprint.py` | Behavioral fingerprinting and weighted cosine. |
+| `WRITEUP.md` | Technical defense for judges. |
+| `bench/run.sh` | Submission runner. |
